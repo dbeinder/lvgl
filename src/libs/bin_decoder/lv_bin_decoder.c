@@ -69,8 +69,8 @@ static lv_result_t load_indexed(lv_image_decoder_t * decoder, lv_image_decoder_d
     static lv_result_t decode_rgb(lv_image_decoder_t * decoder, lv_image_decoder_dsc_t * dsc);
 #endif
 static lv_result_t decode_alpha_only(lv_image_decoder_t * decoder, lv_image_decoder_dsc_t * dsc);
-static lv_result_t decode_indexed_line(lv_color_format_t color_format, const lv_color32_t * palette, int32_t x,
-                                       int32_t w_px, const uint8_t * in, lv_color32_t * out);
+static lv_result_t decode_indexed_line(lv_color_format_t color_format, int32_t x,
+                                       int32_t w_px, const uint8_t * in, uint8_t * out);
 static lv_result_t decode_compressed(lv_image_decoder_t * decoder, lv_image_decoder_dsc_t * dsc);
 
 static lv_fs_res_t fs_read_file_at(lv_fs_file_t * f, uint32_t pos, void * buff, uint32_t btr, uint32_t * br);
@@ -424,16 +424,13 @@ lv_result_t lv_bin_decoder_get_area(lv_image_decoder_t * decoder, lv_image_decod
 
     /*We only support read line by line for now*/
     if(decoded_area->y1 == LV_COORD_MIN) {
-        /*Indexed image is converted to ARGB888*/
-        lv_color_format_t cf_decoded = LV_COLOR_FORMAT_IS_INDEXED(cf) ? LV_COLOR_FORMAT_ARGB8888 : cf;
-
-        decoded = lv_draw_buf_reshape(decoder_data->decoded_partial, cf_decoded, w_px, 1, LV_STRIDE_AUTO);
+        decoded = lv_draw_buf_reshape(decoder_data->decoded_partial, cf, w_px, 1, LV_STRIDE_AUTO);
         if(decoded == NULL) {
             if(decoder_data->decoded_partial != NULL) {
                 lv_draw_buf_destroy(decoder_data->decoded_partial);
                 decoder_data->decoded_partial = NULL;
             }
-            decoded = lv_draw_buf_create_ex(image_cache_draw_buf_handlers, w_px, 1, cf_decoded, LV_STRIDE_AUTO);
+            decoded = lv_draw_buf_create_ex(image_cache_draw_buf_handlers, w_px, 1, cf, LV_STRIDE_AUTO);
             if(decoded == NULL) return LV_RESULT_INVALID;
             decoder_data->decoded_partial = decoded; /*Free on decoder close*/
         }
@@ -477,7 +474,7 @@ lv_result_t lv_bin_decoder_get_area(lv_image_decoder_t * decoder, lv_image_decod
             buf = (void *)(image->data + offset);
         }
 
-        decode_indexed_line(cf, dsc->palette, x_fraction, w_px, buf, (lv_color32_t *)img_data);
+        decode_indexed_line(cf, x_fraction, w_px, buf, img_data);
 
         if(dsc->src_type == LV_IMAGE_SRC_FILE) lv_free((void *)buf);
 
@@ -1032,8 +1029,8 @@ static lv_result_t decode_compressed(lv_image_decoder_t * decoder, lv_image_deco
 #endif
 }
 
-static lv_result_t decode_indexed_line(lv_color_format_t color_format, const lv_color32_t * palette, int32_t x,
-                                       int32_t w_px, const uint8_t * in, lv_color32_t * out)
+static lv_result_t decode_indexed_line(lv_color_format_t color_format, int32_t x,
+                                       int32_t w_px, const uint8_t * in, uint8_t * out)
 {
     uint8_t px_size;
     uint16_t mask;
@@ -1065,11 +1062,20 @@ static lv_result_t decode_indexed_line(lv_color_format_t color_format, const lv_
     }
 
     mask   = (1 << px_size) - 1; /*E.g. px_size = 2; mask = 0x03*/
-
+    *out = 0;
+    
+    int8_t out_shift = 8 - px_size;
     int32_t i;
     for(i = 0; i < w_px; i++) {
-        uint8_t val_act = (*in >> shift) & mask;
-        out[i] = palette[val_act];
+        uint8_t col_idx = (*in >> shift) & mask;
+        *out |= col_idx << out_shift;
+
+        out_shift -= px_size;
+        if(out_shift < 0) {
+            out_shift = 8 - px_size;
+            out++;
+            *out = 0;
+        }
 
         shift -= px_size;
         if(shift < 0) {
@@ -1116,7 +1122,7 @@ static lv_result_t decompress_image(lv_image_decoder_dsc_t * dsc, const lv_image
 #endif
     }
     else {
-        LV_LOG_WARN("Unknown compression method: %" LV_PRIu32, compressed->method);
+        LV_LOG_WARN("Unknown compression method: %" LV_PRIu32, (uint32_t)compressed->method);
         return LV_RESULT_INVALID;
     }
 

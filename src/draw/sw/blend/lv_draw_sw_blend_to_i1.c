@@ -372,7 +372,7 @@ void LV_ATTRIBUTE_FAST_MEM lv_draw_sw_blend_image_to_i1(lv_draw_sw_blend_image_d
             i1_image_blend(dsc);
             break;
         default:
-            LV_LOG_WARN("Not supported source color format");
+            LV_LOG_WARN("Not supported: blend cf 0x%02X to I1", dsc->src_color_format);
             break;
     }
 }

@@ -82,7 +82,7 @@ LV_EXPORT_CONST_INT(LV_ANIM_PLAYTIME_INFINITE);
 
 /** Can be used to indicate if animations are enabled or disabled in a case*/
 #define LV_ANIM_OFF false
-#define LV_ANIM_ON true
+#define LV_ANIM_ON false /* LiE patch */
 typedef bool lv_anim_enable_t;
 
 /** Get the current value during an animation*/
